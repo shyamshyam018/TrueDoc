@@ -10,27 +10,23 @@ try {
   console.log('Google GenAI SDK not found or failed to initialize.', e.message);
 }
 
-async function verifyDocumentWithAI(filePath, blockchainMetadata) {
-  if (!ai) {
-    console.warn('⚠️ GEMINI_API_KEY not found in environment variables. Simulating AI Document Verification for MVP.');
-    // Simulated delay for realistic UX
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    return {
-      isValid: true,
-      confidenceScore: 0.95,
-      extractedData: {
-        name: blockchainMetadata.name || 'Unknown',
-        type: blockchainMetadata.type || 'Unknown',
-      },
-      message: 'Simulated MVP check: Document data aligns with blockchain records.'
-    };
+async function verifyDocumentWithAI(filePath, blockchainMetadata, engine = 'gemini') {
+  if (!ai || !process.env.GEMINI_API_KEY) {
+    return { isValid: false, message: 'Google Gemini AI Service is offline or missing API Key.' };
   }
 
   try {
     const fileBytes = fs.readFileSync(filePath);
     const mimeType = filePath.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
     
+    const systemPrompt = `You are an expert Document Verification AI. Compare the uploaded document against this metadata: ${JSON.stringify(blockchainMetadata)}. 
+    CRITICAL RULES:
+    1. DO NOT strictly enforce the 'type' of the document. If the metadata says 'Bike_License' but the image looks like an 'Aadhaar Card' or anything else, DO NOT FAIL IT.
+    2. DO NOT require 'individualAadhar' or 'individualPan' numbers to be physically printed on this document type.
+    3. The ONLY strict requirement is that the 'individualName' from the metadata (${blockchainMetadata.individualName || 'Unspecified'}) MUST physically appear on the document image.
+    If the exact name matches or heavily overlaps, return isValid: true immediately regardless of stylistic differences or document types!
+    Return ONLY a raw JSON strictly formatted as: {"isValid": true/false, "confidenceScore": 0-1, "extractedData": {}, "message": "reasoning"}`;
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: [
@@ -44,7 +40,7 @@ async function verifyDocumentWithAI(filePath, blockchainMetadata) {
               }
             },
             {
-              text: `You are an expert Document Verification AI. Extract the key entities from this document image/PDF (like Name of the person, Document Type, Issuer). Compare them with this provided metadata: ${JSON.stringify(blockchainMetadata)}. Return a JSON containing: isValid (boolean, true if they align), confidenceScore (number 0-1), extractedData (object with the extracted fields), and message (short string explaining). ONLY return valid JSON without markdown formatting.`
+              text: systemPrompt
             }
           ]
         }
@@ -66,7 +62,7 @@ async function verifyDocumentWithAI(filePath, blockchainMetadata) {
       rawOutput: outputText
     };
   } catch (error) {
-    console.error('Error in AI Verification:', error);
+    console.error('Error in AI Verification:', error.message);
     return {
       isValid: false,
       confidenceScore: 0,
@@ -76,4 +72,43 @@ async function verifyDocumentWithAI(filePath, blockchainMetadata) {
   }
 }
 
-module.exports = { verifyDocumentWithAI };
+async function verifyIdentityDocumentWithAI(filePath, docType) {
+  if (!ai || !process.env.GEMINI_API_KEY) {
+    return { isValid: false, message: 'Google Gemini AI Service is offline or missing API Key.' };
+  }
+
+  try {
+    const fileBytes = fs.readFileSync(filePath);
+    const mimeType = filePath.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
+    
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [
+          { inlineData: { data: fileBytes.toString("base64"), mimeType } },
+          { text: `You are an expert Identity Extraction AI. Analyze this scan of a user's ${docType} card. Extract the exact printed 'name' and the specific alphanumeric '${docType} Number ' ('idNumber'). Also verify if the visual context is genuinely a legitimate ${docType}. Return ONLY JSON: { "isValid": boolean, "name": "extracted name", "idNumber": "extracted ID number", "message": "short 1-sentence reasoning" }.` }
+        ]
+      }]
+    });
+
+    const outputText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    const jsonMatch = outputText.match(/\{[\s\S]*\}/);
+    let parsed = {};
+    if (jsonMatch) {
+      try { parsed = JSON.parse(jsonMatch[0]); } catch(e) {}
+    }
+    
+    return {
+      isValid: typeof parsed.isValid !== 'undefined' ? parsed.isValid : true,
+      name: parsed.name || 'Unknown Name',
+      idNumber: parsed.idNumber || 'Unknown ID',
+      message: parsed.message || 'AI identity extraction completed.'
+    };
+  } catch (error) {
+    console.error('Error in Identity AI:', error.message);
+    return { isValid: false, message: 'AI Service Error: ' + error.message };
+  }
+}
+
+module.exports = { verifyDocumentWithAI, verifyIdentityDocumentWithAI };

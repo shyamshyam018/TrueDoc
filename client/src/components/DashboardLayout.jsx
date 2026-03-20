@@ -36,19 +36,21 @@ export default function DashboardLayout({ user, token, darkMode, setDarkMode, on
         }`}
       >
         <div className={`p-4 border-b ${darkMode ? 'border-slate-800' : 'border-slate-200'}`}>
-          <div className="flex items-center justify-between">
-            <motion.h1
-              animate={{ opacity: sidebarOpen ? 1 : 0 }}
-              className="text-2xl font-black bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent"
-            >
-              DocuVerify
-            </motion.h1>
+          <div className={`flex items-center ${sidebarOpen ? 'justify-between' : 'justify-center'}`}>
+            {sidebarOpen && (
+              <motion.h1
+                animate={{ opacity: sidebarOpen ? 1 : 0 }}
+                className="text-2xl font-black bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent"
+              >
+                DocuVerify
+              </motion.h1>
+            )}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className={`p-2 rounded-lg transition ${
                 darkMode
-                  ? 'hover:bg-slate-800'
-                  : 'hover:bg-slate-100'
+                  ? 'hover:bg-slate-800 text-slate-100'
+                  : 'hover:bg-slate-100 text-slate-800'
               }`}
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -163,7 +165,7 @@ export default function DashboardLayout({ user, token, darkMode, setDarkMode, on
             <motion.h2
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-2xl font-bold"
+              className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}
             >
               {activeTab === 'home' && 'Dashboard'}
               {activeTab === 'issue' && 'Issue Document'}
@@ -172,10 +174,10 @@ export default function DashboardLayout({ user, token, darkMode, setDarkMode, on
             </motion.h2>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className={`p-2 rounded-lg lg:hidden ${
+              className={`p-2 rounded-lg lg:hidden transition ${
                 darkMode
-                  ? 'hover:bg-slate-800'
-                  : 'hover:bg-slate-100'
+                  ? 'hover:bg-slate-800 text-slate-100'
+                  : 'hover:bg-slate-100 text-slate-900'
               }`}
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

@@ -1,9 +1,13 @@
 import { motion } from 'framer-motion'
-import { Search, CheckCircle, AlertCircle, Loader, Shield, User } from 'lucide-react'
-import { useState } from 'react'
+import { Search, CheckCircle, AlertCircle, Loader, Shield, User, Users, FileText, Info } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 
 export default function VerifierDashboard({ user, token, darkMode = false }) {
+  const [activeTab, setActiveTab] = useState('verify')
+  const [directory, setDirectory] = useState({ issuers: [], individuals: [], allDocuments: [] })
+  const [loadingDir, setLoadingDir] = useState(false)
+
   const [searchId, setSearchId] = useState('')
   const [file, setFile] = useState(null)
   const [document, setDocument] = useState(null)
@@ -12,6 +16,27 @@ export default function VerifierDashboard({ user, token, darkMode = false }) {
   const [issuerInfo, setIssuerInfo] = useState(null)
   const [individualInfo, setIndividualInfo] = useState(null)
   const [aiResult, setAiResult] = useState(null)
+
+  useEffect(() => {
+    if (activeTab === 'directory') fetchDirectory()
+  }, [activeTab])
+
+  const fetchDirectory = async () => {
+    setLoadingDir(true)
+    try {
+      const res = await fetch('http://localhost:5000/api/verifier/directory', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setDirectory(data)
+      } else toast.error('Failed to load directory')
+    } catch(err) {
+      toast.error('Failed to load directory')
+    } finally {
+      setLoadingDir(false)
+    }
+  }
 
   const verifyDocument = async (e) => {
     e.preventDefault()
@@ -49,7 +74,11 @@ export default function VerifierDashboard({ user, token, darkMode = false }) {
         const isValid = data.blockchainValid
         setVerified(isValid ? 'valid' : 'invalid')
         
-        toast.success(isValid ? '✅ Verification complete!' : '❌ Blockchain chain broken!')
+        if (!isValid) {
+          toast.error(data.hashMismatchReason || '❌ Blockchain chain logically broken!')
+        } else {
+          toast.success('✅ Verification complete!')
+        }
       } else {
         setVerified('not-found')
         toast.error('Document not found')
@@ -63,7 +92,89 @@ export default function VerifierDashboard({ user, token, darkMode = false }) {
 
   return (
     <div className="space-y-6">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`rounded-xl border p-6 ${
+      <div className={`flex gap-6 border-b ${darkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+        <button onClick={() => setActiveTab('verify')} className={`pb-3 font-semibold transition ${activeTab === 'verify' ? 'border-b-2 border-purple-600 text-purple-600' : darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800'}`}>
+          Verify Document
+        </button>
+        <button onClick={() => setActiveTab('directory')} className={`pb-3 font-semibold transition ${activeTab === 'directory' ? 'border-b-2 border-purple-600 text-purple-600' : darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800'}`}>
+          Network Directory
+        </button>
+      </div>
+
+      {activeTab === 'directory' && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className={`rounded-xl border p-6 ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
+            <h2 className={`flex items-center gap-2 text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+              <Shield className="h-6 w-6 text-purple-500" />
+              Registered Issuers
+            </h2>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {loadingDir ? <Loader className="animate-spin text-purple-500" /> : directory.issuers.map(i => (
+                <div key={i._id} className={`p-4 rounded-lg border ${darkMode ? 'border-slate-600 bg-slate-700/50' : 'border-slate-100 bg-slate-50'}`}>
+                  <p className={`font-bold ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>{i.name}</p>
+                  <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>{i.email}</p>
+                  <p className="mt-2 text-xs font-semibold text-purple-600 bg-purple-100 dark:bg-purple-900/30 inline-block px-2 py-1 rounded">
+                    {i.documentsIssued} Documents Issued
+                  </p>
+                </div>
+              ))}
+              {directory.issuers.length === 0 && !loadingDir && <p className={darkMode ? 'text-slate-400' : 'text-slate-500'}>No issuers found.</p>}
+            </div>
+          </div>
+          
+          <div className={`rounded-xl border p-6 ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
+            <h2 className={`flex items-center gap-2 text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+              <Users className="h-6 w-6 text-emerald-500" />
+              Registered Individuals
+            </h2>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {loadingDir ? <Loader className="animate-spin text-emerald-500" /> : directory.individuals.map(i => (
+                <div key={i._id} className={`p-4 rounded-lg border ${darkMode ? 'border-slate-600 bg-slate-700/50' : 'border-slate-100 bg-slate-50'}`}>
+                  <p className={`font-bold ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>{i.name}</p>
+                  <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>{i.email}</p>
+                  <p className="mt-2 text-xs font-semibold text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 inline-block px-2 py-1 rounded">
+                    {i.documentsOwned} Verified Assets
+                  </p>
+                </div>
+              ))}
+              {directory.individuals.length === 0 && !loadingDir && <p className={darkMode ? 'text-slate-400' : 'text-slate-500'}>No individuals found.</p>}
+            </div>
+          </div>
+          <div className={`rounded-xl border p-6 ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
+            <h2 className={`flex items-center gap-2 text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+              <FileText className="h-6 w-6 text-blue-500" />
+              Global Document Ledger
+            </h2>
+            <div className="mt-4 flex flex-col gap-3">
+              {loadingDir ? <Loader className="animate-spin text-blue-500" /> : directory.allDocuments?.map(doc => (
+                <div key={doc._id} className={`flex items-center justify-between p-4 rounded-lg border ${darkMode ? 'border-slate-600 bg-slate-700/50' : 'border-slate-100 bg-slate-50'}`}>
+                  <div>
+                    <p className={`font-mono text-xs mb-1 ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>ID: {doc.docId}</p>
+                    <p className={`font-bold ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>{doc.name}</p>
+                    <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>{doc.type}</p>
+                    <p className={`text-xs mt-1 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Issued by: {doc.issuer}</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                       setSearchId(doc.docId)
+                       setActiveTab('verify')
+                       window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }} 
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition"
+                  >
+                    Verify Hash
+                  </button>
+                </div>
+              ))}
+              {(!directory.allDocuments || directory.allDocuments.length === 0) && !loadingDir && <p className={darkMode ? 'text-slate-400' : 'text-slate-500'}>No documents registered yet.</p>}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'verify' && (
+        <div className="space-y-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`rounded-xl border p-6 ${
         darkMode
           ? 'border-slate-700 bg-gradient-to-br from-slate-800 to-slate-900'
           : 'border-slate-200 bg-gradient-to-br from-purple-50 to-slate-50'
@@ -87,7 +198,7 @@ export default function VerifierDashboard({ user, token, darkMode = false }) {
             }`}
           />
           
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center mt-2">
             <input
               type="file"
               onChange={(e) => setFile(e.target.files[0])}
@@ -113,6 +224,17 @@ export default function VerifierDashboard({ user, token, darkMode = false }) {
 
       {verified && document && (
         <div className="space-y-4">
+          {!aiResult && (
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`rounded-xl border p-4 ${darkMode ? 'border-indigo-800 bg-indigo-900/30' : 'border-indigo-200 bg-indigo-50'}`}>
+              <div className="flex items-start gap-3">
+                <Info className={`h-6 w-6 flex-shrink-0 ${darkMode ? 'text-indigo-400' : 'text-indigo-600'}`} />
+                <div>
+                  <h4 className={`font-semibold ${darkMode ? 'text-indigo-200' : 'text-indigo-900'}`}>Pure Blockchain Verification</h4>
+                  <p className={`text-sm ${darkMode ? 'text-indigo-300' : 'text-indigo-700'}`}>Since no physical file was uploaded AND the document record was issued without an attached file, the system solely verified the mathematical integrity of the cryptographic chain. To trigger the visual AI checks, upload a supplementary document.</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
           {aiResult && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -274,6 +396,8 @@ export default function VerifierDashboard({ user, token, darkMode = false }) {
           <p className={`mt-4 font-medium ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>No document searched yet</p>
           <p className={`text-sm mt-1 ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>Enter a document ID above to verify its authenticity</p>
         </motion.div>
+      )}
+        </div>
       )}
     </div>
   )

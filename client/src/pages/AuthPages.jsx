@@ -9,6 +9,9 @@ export default function AuthPages({ page, setPage, darkMode, onAuth }) {
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState('individual')
+  const [stateOfResidence, setStateOfResidence] = useState('')
+  const [aadharNumber, setAadharNumber] = useState('')
+  const [panNumber, setPanNumber] = useState('')
   const [loading, setLoading] = useState(false)
 
   const isLogin = page === 'login'
@@ -17,8 +20,15 @@ export default function AuthPages({ page, setPage, darkMode, onAuth }) {
     e.preventDefault()
 
     if (!email || !password || (!isLogin && !name)) {
-      toast.error('Please fill all fields')
+      toast.error('Please fill all required fields')
       return
+    }
+
+    if (!isLogin && role === 'individual') {
+      if (!stateOfResidence || !aadharNumber || !panNumber) {
+        toast.error('Please fill all KYC fields')
+        return
+      }
     }
 
     setLoading(true)
@@ -26,7 +36,7 @@ export default function AuthPages({ page, setPage, darkMode, onAuth }) {
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register'
       const body = isLogin
         ? { email, password }
-        : { name, email, password, role }
+        : { name, email, password, role, stateOfResidence, aadharNumber, panNumber }
 
       const res = await fetch(`http://localhost:5000${endpoint}`, {
         method: 'POST',
@@ -197,6 +207,40 @@ export default function AuthPages({ page, setPage, darkMode, onAuth }) {
             </motion.div>
           )}
 
+          {/* KYC Fields (Individual only) */}
+          {!isLogin && role === 'individual' && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4">
+              <h3 className={`font-bold border-b pb-2 ${darkMode ? 'text-emerald-400 border-slate-700' : 'text-emerald-600 border-slate-200'}`}>Mandatory KYC Details</h3>
+              <input
+                type="text"
+                value={stateOfResidence}
+                onChange={(e) => setStateOfResidence(e.target.value)}
+                placeholder="State of Residence"
+                className={`w-full rounded-lg px-4 py-3 border transition ${
+                  darkMode ? 'border-slate-600 bg-slate-800 text-slate-100 placeholder-slate-500 focus:border-blue-500' : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-blue-400'
+                } focus:outline-none`}
+              />
+              <input
+                type="text"
+                value={aadharNumber}
+                onChange={(e) => setAadharNumber(e.target.value)}
+                placeholder="Aadhar Number"
+                className={`w-full rounded-lg px-4 py-3 border transition ${
+                  darkMode ? 'border-slate-600 bg-slate-800 text-slate-100 placeholder-slate-500 focus:border-blue-500' : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-blue-400'
+                } focus:outline-none`}
+              />
+              <input
+                type="text"
+                value={panNumber}
+                onChange={(e) => setPanNumber(e.target.value)}
+                placeholder="PAN Number"
+                className={`w-full rounded-lg px-4 py-3 border transition ${
+                  darkMode ? 'border-slate-600 bg-slate-800 text-slate-100 placeholder-slate-500 focus:border-blue-500' : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-blue-400'
+                } focus:outline-none`}
+              />
+            </motion.div>
+          )}
+
           {/* Submit button */}
           <motion.button
             initial={{ opacity: 0 }}
@@ -226,6 +270,9 @@ export default function AuthPages({ page, setPage, darkMode, onAuth }) {
                 setPassword('')
                 setName('')
                 setRole('individual')
+                setStateOfResidence('')
+                setAadharNumber('')
+                setPanNumber('')
                 setPage(isLogin ? 'register' : 'login')
               }}
               className="font-semibold text-blue-500 hover:text-blue-600"
