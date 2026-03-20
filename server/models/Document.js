@@ -9,6 +9,7 @@ const DocumentSchema = new mongoose.Schema({
   hash: { type: String, required: true },
   previousHash: { type: String, default: '0'.repeat(64) }, // Blockchain chain reference
   content: { type: String, default: '' }, // Document content
+  fileUrl: { type: String, default: null }, // URL to uploaded file
   metadata: { type: Object, default: {} }, // Additional metadata
 }, { timestamps: true })
 

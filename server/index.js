@@ -5,6 +5,18 @@ const mongoose = require('mongoose')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const crypto = require('crypto')
+const path = require('path')
+const multer = require('multer')
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/')
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`)
+  }
+})
+const upload = multer({ storage })
 
 const User = require('./models/User')
 const Document = require('./models/Document')
@@ -13,6 +25,7 @@ const app = express()
 
 app.use(cors())
 app.use(express.json())
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 const start = async () => {
   try {
@@ -86,10 +99,15 @@ const authMiddleware = (req, res, next) => {
 }
 
 // Document endpoints with blockchain logic
-app.post('/api/issuer/document', authMiddleware, async (req, res) => {
+app.post('/api/issuer/document', authMiddleware, upload.single('file'), async (req, res) => {
   if (req.user.role !== 'issuer') return res.status(403).json({ message: 'Permission denied' })
 
   const { name, type, owner, content, metadata } = req.body
+  let parsedMetadata = metadata;
+  if (typeof metadata === 'string') {
+    try { parsedMetadata = JSON.parse(metadata) } catch (e) { parsedMetadata = {} }
+  }
+
   if (!name || !type || !owner) return res.status(400).json({ message: 'Missing fields' })
 
   try {
@@ -97,9 +115,12 @@ app.post('/api/issuer/document', authMiddleware, async (req, res) => {
     const previousDoc = await Document.findOne().sort({ createdAt: -1 })
     const previousHash = previousDoc ? previousDoc.hash : '0'.repeat(64)
     
+    // File handling
+    const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    
     // Create blockchain hash with chaining
     const timestamp = Date.now()
-    const blockData = `${name}|${type}|${req.user.email}|${owner}|${timestamp}|${previousHash}`
+    const blockData = `${name}|${type}|${req.user.email}|${owner}|${timestamp}|${fileUrl || ''}|${previousHash}`
     const hash = crypto.createHash('sha256').update(blockData).digest('hex')
     const docId = `DOC-${Math.floor(1000 + Math.random() * 9000)}`
 
@@ -111,8 +132,9 @@ app.post('/api/issuer/document', authMiddleware, async (req, res) => {
       owner,
       hash,
       previousHash,
+      fileUrl,
       content: content || '',
-      metadata: metadata || { issuedAt: new Date(timestamp).toISOString() }
+      metadata: parsedMetadata || { issuedAt: new Date(timestamp).toISOString() }
     })
 
     res.status(201).json({ success: true, document, message: 'Document issued successfully' })
@@ -142,15 +164,41 @@ app.get('/api/issuer/documents', authMiddleware, async (req, res) => {
   }
 })
 
-app.post('/api/verifier', authMiddleware, async (req, res) => {
+const { verifyDocumentWithAI } = require('./utils/ai')
+
+app.post('/api/verifier', authMiddleware, upload.single('file'), async (req, res) => {
   const { docId, hash } = req.body
   if (!docId) return res.status(400).json({ message: 'Document ID required' })
 
   const doc = await Document.findOne({ docId })
   if (!doc) return res.status(404).json({ valid: false, message: 'Document not found' })
-  if (hash && hash !== doc.hash) return res.json({ valid: false, message: 'Hash mismatch' })
+  if (hash && hash !== doc.hash) return res.json({ valid: false, message: 'Blockchain hash mismatch! Document might be tampered.' })
 
-  res.json({ valid: true, document: doc })
+  const previousDoc = await Document.findOne({ hash: doc.previousHash })
+  const isValid = !previousDoc || doc.previousHash === previousDoc.hash
+
+  const issuer = await User.findOne({ email: doc.issuer }).select('email role')
+  const individual = await User.findOne({ email: doc.owner }).select('email role')
+
+  let aiResult = null;
+  if (req.file) {
+    const blockchainParams = {
+      name: doc.name,
+      type: doc.type,
+      owner: doc.owner,
+      issuer: doc.issuer
+    };
+    aiResult = await verifyDocumentWithAI(req.file.path, blockchainParams);
+  }
+
+  res.json({ 
+    valid: aiResult ? aiResult.isValid : true, 
+    document: doc,
+    issuer,
+    individual,
+    blockchainValid: isValid,
+    aiResult
+  })
 })
 
 app.get('/api/verify/document/:docId', authMiddleware, async (req, res) => {

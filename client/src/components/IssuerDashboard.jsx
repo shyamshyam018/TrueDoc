@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 
 export default function IssuerDashboard({ user, token, darkMode = false }) {
   const [documents, setDocuments] = useState([])
-  const [form, setForm] = useState({ name: '', type: '', recipientEmail: '', content: '' })
+  const [form, setForm] = useState({ name: '', type: '', recipientEmail: '', content: '', file: null })
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [copied, setCopied] = useState(null)
@@ -43,25 +43,26 @@ export default function IssuerDashboard({ user, token, darkMode = false }) {
 
     setLoading(true)
     try {
+      const formData = new FormData()
+      formData.append('name', form.name)
+      formData.append('type', form.type)
+      formData.append('owner', form.recipientEmail)
+      formData.append('content', form.content)
+      formData.append('metadata', JSON.stringify({ issuerEmail: user.email, issuedAt: new Date().toISOString() }))
+      if (form.file) formData.append('file', form.file)
+
       const res = await fetch('http://localhost:5000/api/issuer/document', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          name: form.name,
-          type: form.type,
-          owner: form.recipientEmail,
-          content: form.content,
-          metadata: { issuerEmail: user.email, issuedAt: new Date().toISOString() }
-        }),
+        body: formData,
       })
 
       const data = await res.json()
       if (res.ok && data.success) {
         setDocuments(prev => [data.document, ...prev])
-        setForm({ name: '', type: '', recipientEmail: '', content: '' })
+        setForm({ name: '', type: '', recipientEmail: '', content: '', file: null })
         toast.success('🎉 Document issued successfully!')
       } else {
         toast.error(data.message || 'Failed to issue document')
@@ -129,6 +130,15 @@ export default function IssuerDashboard({ user, token, darkMode = false }) {
                 : 'border-slate-300 bg-white text-slate-900 placeholder-slate-500 focus:border-blue-500'
             }`}
           />
+          <input
+            type="file"
+            onChange={(e) => setForm({ ...form, file: e.target.files[0] })}
+            className={`w-full rounded-lg border px-4 py-3 focus:outline-none transition file:mr-4 file:rounded-full file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100 ${
+              darkMode
+                ? 'border-slate-600 bg-slate-700 text-slate-100 focus:border-blue-400'
+                : 'border-slate-300 bg-white text-slate-900 focus:border-blue-500'
+            }`}
+          />
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -187,6 +197,11 @@ export default function IssuerDashboard({ user, token, darkMode = false }) {
                     <p className={`text-sm font-semibold ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>{doc.name}</p>
                     <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>{doc.type} → {doc.owner}</p>
                     <div className="mt-3 space-y-1 text-xs">
+                      {doc.fileUrl && (
+                        <p className={darkMode ? 'text-blue-400' : 'text-blue-600'}>
+                          <a href={`http://localhost:5000${doc.fileUrl}`} target="_blank" rel="noopener noreferrer">📎 View Attached File</a>
+                        </p>
+                      )}
                       <p className={darkMode ? 'text-slate-500' : 'text-slate-500'}>⛓️ Blockchain Hash:</p>
                       <p className={`font-mono break-all ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>{doc.hash}</p>
                       <p className={`mt-2 ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>🔗 Previous Hash: {doc.previousHash === '0'.repeat(64) ? '🔗 Genesis (Root)' : doc.previousHash.slice(0, 16) + '...'}</p>
